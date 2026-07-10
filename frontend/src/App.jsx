@@ -6,7 +6,7 @@ import {
   Award, TrendingUp, Settings as SettingsIcon, LogOut, 
   ChevronRight, Send, CheckCircle2, Circle, Upload, 
   Play, ArrowRight, User, Sparkles, BookOpen, Heart, 
-  Flame, BookOpenCheck, Check, AlertCircle, RefreshCw
+  Flame, BookOpenCheck, Check, AlertCircle, RefreshCw, Menu
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE || ""; // Relative proxy works in dev, dynamic URL for production
@@ -22,6 +22,7 @@ export default function App() {
 
   // Navigation State
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Chat State
   const [chatMessages, setChatMessages] = useState([]);
@@ -175,6 +176,10 @@ export default function App() {
     setProgressLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/progress/${student.id}`);
+      if (res.status === 404) {
+        handleLogout();
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         setProgressMetrics(data);
@@ -190,6 +195,10 @@ export default function App() {
     if (!student || !student.id) return;
     try {
       const res = await fetch(`${API_BASE}/api/motivation/${student.id}`);
+      if (res.status === 404) {
+        handleLogout();
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         setMotivationText(data.motivation_text);
@@ -202,6 +211,10 @@ export default function App() {
     if (!student || !student.id) return;
     try {
       const res = await fetch(`${API_BASE}/api/resume/latest/${student.id}`);
+      if (res.status === 404) {
+        handleLogout();
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         if (data.has_resume) {
@@ -252,6 +265,10 @@ export default function App() {
     setRoadmapLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/roadmap/${student.id}`);
+      if (res.status === 404) {
+        handleLogout();
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         if (data.has_roadmap) {
@@ -320,6 +337,10 @@ export default function App() {
   const fetchChatHistory = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/mentor/history/${student.id}`);
+      if (res.status === 404) {
+        handleLogout();
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         setChatMessages(data);
@@ -462,8 +483,8 @@ export default function App() {
 
   if (!student || !student.id) {
     return (
-      <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
-        <div className="glass-card" style={{ width: '100%', maxWidth: '440px', padding: '2.5rem', animation: 'fadeIn 0.5s ease-out' }}>
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <div className="glass-card w-full max-w-[440px] p-6 md:p-10 animate-[fadeIn_0.5s_ease-out]">
           <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
             <div style={{ display: 'inline-flex', padding: '1rem', borderRadius: '50%', background: 'rgba(139, 92, 246, 0.15)', color: '#8b5cf6', marginBottom: '1rem' }}>
               <Sparkles size={32} />
@@ -518,9 +539,29 @@ export default function App() {
   }
 
   return (
-    <div className="app-container">
+    <div className="app-container overflow-x-hidden">
+      {/* MOBILE HEADER */}
+      <header className="md:hidden fixed top-0 left-0 right-0 h-16 bg-[#090d16]/95 backdrop-blur-md border-b border-white/10 z-[90] flex items-center justify-between px-4">
+        <button onClick={() => setMobileMenuOpen(true)} className="p-2 text-slate-300 hover:text-white focus:outline-none">
+          <Menu size={24} />
+        </button>
+        <div className="flex items-center gap-2">
+          <Sparkles color="#8b5cf6" size={20} />
+          <span className="font-extrabold text-sm tracking-tight">Placement Mentor</span>
+        </div>
+        <div className="w-10" />
+      </header>
+
+      {/* MOBILE BACKDROP OVERLAY */}
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[95] md:hidden" 
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
       {/* SIDEBAR NAVIGATION */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${mobileMenuOpen ? 'open' : ''}`}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2.5rem' }}>
           <Sparkles color="#8b5cf6" size={24} />
           <h3 style={{ fontSize: '1.25rem', fontWeight: 800, letterSpacing: '-0.02em' }}>Placement Mentor</h3>
@@ -539,7 +580,10 @@ export default function App() {
           ].map(item => (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => {
+                setActiveTab(item.id);
+                setMobileMenuOpen(false);
+              }}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -562,7 +606,10 @@ export default function App() {
         </nav>
 
         <button 
-          onClick={handleLogout}
+          onClick={() => {
+            handleLogout();
+            setMobileMenuOpen(false);
+          }}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -589,12 +636,12 @@ export default function App() {
         {/* TAB 1: DASHBOARD */}
         {activeTab === "dashboard" && (
           <div>
-            <header className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <header className="page-header flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
                 <h2>Hello, <span className="gradient-text">{student.name}</span>!</h2>
                 <p>Welcome back to your placement roadmap cockpit.</p>
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--surface-border)', padding: '0.5rem 1rem', borderRadius: '50px', alignItems: 'center' }}>
+              <div className="flex gap-2 bg-white/[0.03] border border-white/10 px-4 py-2 rounded-full items-center">
                 <Flame color="#ef4444" size={18} />
                 <span style={{ fontWeight: 700 }}>{progressMetrics.streak} Day Streak</span>
               </div>
@@ -612,7 +659,7 @@ export default function App() {
               </div>
             )}
 
-            <div className="dashboard-grid">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
               <div className="glass-card stats-card">
                 <div className="stats-icon">
                   <Flame size={24} />
@@ -644,8 +691,8 @@ export default function App() {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem', marginTop: '2rem' }}>
-              <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
+              <div className="lg:col-span-2 glass-card flex flex-col gap-4">
                 <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Active Resume ATS Status</h3>
                 {resumeData ? (
                   <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
@@ -737,7 +784,7 @@ export default function App() {
                   </div>
                 )}
                 {chatMessages.map((msg, idx) => (
-                  <div key={idx} className={`message-bubble ${msg.sender}`}>
+                  <div key={idx} className={`message-bubble ${msg.sender} max-w-[85%] md:max-w-[70%]`}>
                     <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                     </div>
@@ -778,8 +825,8 @@ export default function App() {
               <p>Upload your PDF resume to check ATS compatibility, extract skills, and fetch recommendations.</p>
             </header>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1.5rem' }}>
-              <div className="glass-card" style={{ height: 'fit-content' }}>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="glass-card h-fit lg:col-span-1">
                 <h3 style={{ fontSize: '1.25rem', marginBottom: '1.25rem' }}>Upload Document</h3>
                 
                 <form onSubmit={handleResumeUpload}>
@@ -811,7 +858,7 @@ export default function App() {
                 </form>
               </div>
 
-              <div className="glass-card" style={{ minHeight: '300px' }}>
+              <div className="glass-card lg:col-span-2 min-h-[300px]">
                 <h3 style={{ fontSize: '1.25rem', marginBottom: '1.5rem' }}>ATS Analysis & Suggestions</h3>
 
                 {resumeData ? (
@@ -844,7 +891,7 @@ export default function App() {
         {/* TAB 4: ROADMAP TIMELINE */}
         {activeTab === "roadmap" && (
           <div>
-            <header className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <header className="page-header flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
                 <h2>Placement Prep <span className="gradient-text">Roadmap Checklist</span></h2>
                 <p>Track your goals and mark completed tasks from your personalized roadmaps.</p>
@@ -862,7 +909,7 @@ export default function App() {
             </header>
 
             {roadmap ? (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* TIMELINE VISUAL */}
                 <div className="glass-card">
                   <h3 style={{ fontSize: '1.25rem', marginBottom: '1.5rem' }}>Roadmap Guide</h3>
@@ -937,8 +984,8 @@ export default function App() {
             </header>
 
             <div className="glass-card" style={{ marginBottom: '1.5rem' }}>
-              <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                <div className="form-group" style={{ margin: 0, flex: 1, minWidth: '200px' }}>
+              <div className="flex flex-col sm:flex-row gap-5 items-stretch sm:items-end">
+                <div className="form-group flex-1 m-0">
                   <label>Domain Choice</label>
                   <select className="form-control" value={projectDomain} onChange={e => setProjectDomain(e.target.value)}>
                     <option value="web">Web Development (React, FastAPI, Node)</option>
@@ -946,7 +993,7 @@ export default function App() {
                   </select>
                 </div>
 
-                <div className="form-group" style={{ margin: 0, flex: 1, minWidth: '200px' }}>
+                <div className="form-group flex-1 m-0">
                   <label>Difficulty Level</label>
                   <select className="form-control" value={projectLevel} onChange={e => setProjectLevel(e.target.value)}>
                     <option value="beginner">Beginner (Foundations)</option>
@@ -955,7 +1002,7 @@ export default function App() {
                   </select>
                 </div>
 
-                <button onClick={fetchProjectRecommendations} className="btn-primary" style={{ height: '42px' }} disabled={projectsLoading}>
+                <button onClick={fetchProjectRecommendations} className="btn-primary w-full sm:w-auto h-[42px] justify-center" disabled={projectsLoading}>
                   {projectsLoading ? <RefreshCw className="animate-spin" size={18} /> : (
                     <>
                       <span>Query Recommendation Agent</span>
@@ -995,7 +1042,7 @@ export default function App() {
             </header>
 
             {!interviewSession && !interviewFinishedData && (
-              <div className="glass-card" style={{ maxWidth: '600px', margin: '0 auto', padding: '2.5rem' }}>
+              <div className="glass-card max-w-[600px] mx-auto p-6 md:p-10">
                 <h3 style={{ fontSize: '1.5rem', marginBottom: '1.5rem', textAlign: 'center' }}>Configure Interview Session</h3>
 
                 <div className="form-group">
@@ -1030,17 +1077,16 @@ export default function App() {
 
             {interviewSession && (
               <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 250px)', padding: '0' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--surface-border)', padding: '1rem', background: 'rgba(255, 255, 255, 0.02)' }}>
-                  <span style={{ fontWeight: 700 }}>Active session: {interviewSession.role} ({interviewSession.type.toUpperCase()})</span>
-                  <span style={{ color: 'var(--primary)', fontWeight: 600 }}>Active Loop</span>
+                <div className="flex justify-between border-b border-white/10 p-4 bg-white/[0.02]">
+                  <span style={{ fontWeight: 700 }} className="text-sm sm:text-base">Active session: {interviewSession.role} ({interviewSession.type.toUpperCase()})</span>
+                  <span style={{ color: 'var(--primary)', fontWeight: 600 }} className="text-sm">Active Loop</span>
                 </div>
 
-                <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div className="flex-1 overflow-y-auto p-4 md:p-6 flex flex-col gap-4">
                   {interviewTranscript.map((turn, idx) => (
                     <div 
                       key={idx} 
-                      className={`message-bubble ${turn.role === 'interviewer' ? 'assistant' : 'user'}`}
-                      style={{ maxWidth: '75%' }}
+                      className={`message-bubble ${turn.role === 'interviewer' ? 'assistant' : 'user'} max-w-[85%] md:max-w-[75%]`}
                     >
                       <p style={{ fontWeight: turn.role === 'interviewer' ? 700 : 500, fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>
                         {turn.role === 'interviewer' ? 'Interviewer Agent' : 'You (Candidate)'}
@@ -1077,17 +1123,17 @@ export default function App() {
             )}
 
             {interviewFinishedData && (
-              <div className="glass-card" style={{ maxWidth: '750px', margin: '0 auto' }}>
+              <div className="glass-card max-w-[750px] mx-auto p-6 md:p-8">
                 <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-                  <div style={{ display: 'inline-flex', padding: '1.5rem', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '50%', color: '#10b981', marginBottom: '1rem' }}>
+                  <div style={{ display: 'inline-flex', padding: '1.25rem', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '50%', color: '#10b981', marginBottom: '1rem' }}>
                     <Award size={36} />
                   </div>
                   <h2>Interview Completed!</h2>
                   <p style={{ color: 'var(--text-secondary)' }}>Read your performance scorecard below.</p>
                 </div>
 
-                <div style={{ display: 'flex', gap: '2rem', background: 'rgba(255, 255, 255, 0.02)', padding: '1.5rem', borderRadius: 'var(--border-radius-md)', border: '1px solid var(--surface-border)', marginBottom: '2rem', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', width: '80px', height: '80px', borderRadius: '50%', background: 'var(--primary-gradient)', fontSize: '1.75rem', fontWeight: 800, alignItems: 'center', justifyContent: 'center' }}>
+                <div className="flex flex-col sm:flex-row gap-6 bg-white/[0.02] p-6 rounded-2xl border border-white/[0.08] mb-8 items-center text-center sm:text-left">
+                  <div style={{ display: 'flex', width: '80px', height: '80px', borderRadius: '50%', background: 'var(--primary-gradient)', fontSize: '1.75rem', fontWeight: 800, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     {interviewFinishedData.score}
                   </div>
                   <div>
@@ -1116,8 +1162,8 @@ export default function App() {
               <p>Analyze roadmap metrics, complete goals, and review recommendations.</p>
             </header>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1.5rem' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-1 flex flex-col gap-6">
                 <div className="glass-card stats-card">
                   <div className="stats-icon">
                     <Flame size={24} />
@@ -1169,7 +1215,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="glass-card">
+              <div className="glass-card lg:col-span-2">
                 <h3 style={{ fontSize: '1.25rem', marginBottom: '1.5rem' }}>AI Progress Evaluation Summary</h3>
                 <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6', fontSize: '0.95rem', color: '#e2e8f0' }}>
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{progressMetrics.feedback_summary}</ReactMarkdown>
@@ -1187,7 +1233,7 @@ export default function App() {
               <p>Configure details parsed by Student Profile Agent to direct customized roadmaps.</p>
             </header>
 
-            <div className="glass-card" style={{ maxWidth: '800px' }}>
+            <div className="glass-card max-w-[800px]">
               {settingsMessage && (
                 <div className="glass-card" style={{ background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.3)', padding: '1rem', marginBottom: '1.5rem' }}>
                   <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: '#a78bfa', marginBottom: '0.5rem', fontWeight: 600 }}>
@@ -1199,7 +1245,7 @@ export default function App() {
               )}
 
               <form onSubmit={handleUpdateProfile}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div className="form-group">
                     <label>Full Name</label>
                     <input 
@@ -1288,7 +1334,7 @@ export default function App() {
                   />
                 </div>
 
-                <button type="submit" className="btn-primary" disabled={settingsLoading}>
+                <button type="submit" className="btn-primary w-full sm:w-auto justify-center" disabled={settingsLoading}>
                   {settingsLoading ? <RefreshCw className="animate-spin" size={18} /> : (
                     <>
                       <span>Save and Update Profile</span>

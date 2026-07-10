@@ -291,6 +291,7 @@ async def get_roadmap(student_id: int, db_session: Session = Depends(get_db)):
 
 # --- CHAT / COORDINATOR ENDPOINT ---
 @app.post("/api/mentor/chat/{student_id}", response_model=schemas.ChatResponse)
+@app.post("/api/chat/{student_id}", response_model=schemas.ChatResponse)
 async def chat_coordinator(student_id: int, request: schemas.ChatRequest, db_session: Session = Depends(get_db)):
     student = crud.get_student_profile(db_session, student_id)
     if not student:
@@ -323,6 +324,7 @@ async def chat_coordinator(student_id: int, request: schemas.ChatRequest, db_ses
     return {"response": agent_response}
 
 @app.get("/api/mentor/history/{student_id}", response_model=List[schemas.ChatHistoryMessage])
+@app.get("/api/chat/history/{student_id}", response_model=List[schemas.ChatHistoryMessage])
 async def get_chat_history(student_id: int, db_session: Session = Depends(get_db)):
     history = crud.get_chat_history(db_session, student_id)
     return [{"sender": msg.sender, "content": msg.content, "timestamp": msg.timestamp} for msg in history]
