@@ -6,7 +6,8 @@ import {
   Award, TrendingUp, Settings as SettingsIcon, LogOut, 
   ChevronRight, Send, CheckCircle2, Circle, Upload, 
   Play, ArrowRight, User, Sparkles, BookOpen, Heart, 
-  Flame, BookOpenCheck, Check, AlertCircle, RefreshCw, Menu
+  Flame, BookOpenCheck, Check, AlertCircle, RefreshCw, Menu,
+  Plus, Trash, Trash2, ThumbsUp, ThumbsDown, Copy, RotateCcw
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE || ""; // Relative proxy works in dev, dynamic URL for production
@@ -29,6 +30,24 @@ export default function App() {
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef(null);
+  const textareaRef = useRef(null);
+
+  // ChatGPT Redesign Conversations States
+  const [conversations, setConversations] = useState([]);
+  const [activeConversationId, setActiveConversationId] = useState("");
+  const [chatSidebarOpen, setChatSidebarOpen] = useState(false);
+
+  const activeConversation = conversations.find(c => c.id === activeConversationId);
+  const activeMessages = activeConversation ? activeConversation.messages : [];
+
+  // Auto-grow textarea height
+  const handleInputChange = (e) => {
+    setChatInput(e.target.value);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
+    }
+  };
 
   // Resume State
   const [resumeFile, setResumeFile] = useState(null);
@@ -98,6 +117,44 @@ export default function App() {
     }
   }, []);
 
+  // ChatGPT Sync Effects
+  useEffect(() => {
+    if (student && student.id) {
+      const saved = localStorage.getItem(`mentor_conversations_${student.id}`);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setConversations(parsed);
+          const savedId = localStorage.getItem(`mentor_active_conv_${student.id}`);
+          if (savedId && parsed.find(c => c.id === savedId)) {
+            setActiveConversationId(savedId);
+          } else if (parsed.length > 0) {
+            setActiveConversationId(parsed[0].id);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      } else {
+        fetchChatHistory();
+      }
+    } else {
+      setConversations([]);
+      setActiveConversationId("");
+    }
+  }, [student]);
+
+  useEffect(() => {
+    if (student && student.id && conversations.length > 0) {
+      localStorage.setItem(`mentor_conversations_${student.id}`, JSON.stringify(conversations));
+    }
+  }, [conversations, student]);
+
+  useEffect(() => {
+    if (student && student.id && activeConversationId) {
+      localStorage.setItem(`mentor_active_conv_${student.id}`, activeConversationId);
+    }
+  }, [activeConversationId, student]);
+
   // Fetch relevant tab data when activeTab or student changes
   useEffect(() => {
     if (!student || !student.id) return;
@@ -107,7 +164,9 @@ export default function App() {
       fetchMotivation();
       fetchLatestResume();
     } else if (activeTab === "chat") {
-      fetchChatHistory();
+      if (conversations.length === 0) {
+        fetchChatHistory();
+      }
     } else if (activeTab === "resume") {
       fetchLatestResume();
     } else if (activeTab === "roadmap") {
@@ -122,7 +181,7 @@ export default function App() {
   // Scroll chat boxes to bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages, chatLoading]);
+  }, [conversations, chatLoading, activeTab]);
 
   useEffect(() => {
     interviewChatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -164,8 +223,14 @@ export default function App() {
 
   const handleLogout = () => {
     localStorage.removeItem("placement_student");
+    if (student) {
+      localStorage.removeItem(`mentor_conversations_${student.id}`);
+      localStorage.removeItem(`mentor_active_conv_${student.id}`);
+    }
     setStudent(null);
     setChatMessages([]);
+    setConversations([]);
+    setActiveConversationId("");
     setResumeData(null);
     setRoadmap(null);
     setInterviewSession(null);
@@ -335,6 +400,7 @@ export default function App() {
   };
 
   const fetchChatHistory = async () => {
+    if (!student || !student.id) return;
     try {
       const res = await fetch(`${API_BASE}/api/mentor/history/${student.id}`);
       if (res.status === 404) {
@@ -343,18 +409,65 @@ export default function App() {
       }
       if (res.ok) {
         const data = await res.json();
-        setChatMessages(data);
+        if (data && data.length > 0) {
+          const defaultConv = {
+            id: "imported_history",
+            title: "Imported History",
+            messages: data,
+            timestamp: Date.now()
+          };
+          setConversations([defaultConv]);
+          setActiveConversationId("imported_history");
+          localStorage.setItem(`mentor_conversations_${student.id}`, JSON.stringify([defaultConv]));
+          localStorage.setItem(`mentor_active_conv_${student.id}`, "imported_history");
+        }
       }
     } catch (e) {}
   };
 
   const sendChatMessage = async (e) => {
     if (e) e.preventDefault();
-    if (!chatInput.trim()) return;
+    if (!chatInput.trim() || !student || !student.id) return;
 
+    let currentConvId = activeConversationId;
+    let currentConvs = [...conversations];
     const userText = chatInput.trim();
     setChatInput("");
-    setChatMessages(prev => [...prev, { sender: "user", content: userText }]);
+    
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
+
+    if (!currentConvId) {
+      const newConv = {
+        id: `conv_${Date.now()}`,
+        title: userText.length > 25 ? `${userText.slice(0, 25)}...` : userText,
+        messages: [],
+        timestamp: Date.now()
+      };
+      currentConvs = [newConv, ...currentConvs];
+      currentConvId = newConv.id;
+      setConversations(currentConvs);
+      setActiveConversationId(newConv.id);
+    }
+
+    const userMessage = { sender: "user", content: userText, timestamp: new Date().toISOString() };
+    
+    setConversations(prev => prev.map(c => {
+      if (c.id === currentConvId) {
+        const title = c.title === "New Chat" && c.messages.length === 0 
+          ? (userText.length > 25 ? `${userText.slice(0, 25)}...` : userText)
+          : c.title;
+        return {
+          ...c,
+          title,
+          messages: [...c.messages, userMessage],
+          timestamp: Date.now()
+        };
+      }
+      return c;
+    }));
+
     setChatLoading(true);
 
     try {
@@ -366,15 +479,405 @@ export default function App() {
 
       if (res.ok) {
         const data = await res.json();
-        setChatMessages(prev => [...prev, { sender: "assistant", content: data.response }]);
+        const assistantMessage = { 
+          sender: "assistant", 
+          content: data.response, 
+          timestamp: new Date().toISOString(),
+          feedback: null
+        };
+        
+        setConversations(prev => prev.map(c => {
+          if (c.id === currentConvId) {
+            return {
+              ...c,
+              messages: [...c.messages, assistantMessage],
+              timestamp: Date.now()
+            };
+          }
+          return c;
+        }));
       } else {
         throw new Error();
       }
     } catch (e) {
-      setChatMessages(prev => [...prev, { sender: "assistant", content: "Sorry, I had trouble contacting the coordinator agent. Please check if backend is running." }]);
+      const errMessage = { 
+        sender: "assistant", 
+        content: "Sorry, I had trouble contacting the coordinator agent. Please check if backend is running.",
+        timestamp: new Date().toISOString()
+      };
+      setConversations(prev => prev.map(c => {
+        if (c.id === currentConvId) {
+          return {
+            ...c,
+            messages: [...c.messages, errMessage]
+          };
+        }
+        return c;
+      }));
     } finally {
       setChatLoading(false);
     }
+  };
+
+  // ChatGPT Redesign Conversation Actions
+  const handleLikeMessage = (convId, msgIdx) => {
+    setConversations(prev => prev.map(c => {
+      if (c.id === convId) {
+        const updatedMsgs = [...c.messages];
+        updatedMsgs[msgIdx] = {
+          ...updatedMsgs[msgIdx],
+          feedback: updatedMsgs[msgIdx].feedback === "like" ? null : "like"
+        };
+        return { ...c, messages: updatedMsgs };
+      }
+      return c;
+    }));
+  };
+
+  const handleDislikeMessage = (convId, msgIdx) => {
+    setConversations(prev => prev.map(c => {
+      if (c.id === convId) {
+        const updatedMsgs = [...c.messages];
+        updatedMsgs[msgIdx] = {
+          ...updatedMsgs[msgIdx],
+          feedback: updatedMsgs[msgIdx].feedback === "dislike" ? null : "dislike"
+        };
+        return { ...c, messages: updatedMsgs };
+      }
+      return c;
+    }));
+  };
+
+  const handleRegenerateResponse = async (convId, msgIdx) => {
+    const conv = conversations.find(c => c.id === convId);
+    if (!conv || msgIdx <= 0) return;
+    
+    const userPrompt = conv.messages[msgIdx - 1]?.content;
+    if (!userPrompt) return;
+
+    setChatLoading(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/mentor/chat/${student.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: userPrompt })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setConversations(prev => prev.map(c => {
+          if (c.id === convId) {
+            const updatedMsgs = [...c.messages];
+            updatedMsgs[msgIdx] = {
+              ...updatedMsgs[msgIdx],
+              content: data.response,
+              timestamp: new Date().toISOString(),
+              feedback: null
+            };
+            return { ...c, messages: updatedMsgs };
+          }
+          return c;
+        }));
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const handleNewChat = () => {
+    if (!student || !student.id) return;
+    const newConv = {
+      id: `conv_${Date.now()}`,
+      title: "New Chat",
+      messages: [],
+      timestamp: Date.now()
+    };
+    const updatedConvs = [newConv, ...conversations];
+    setConversations(updatedConvs);
+    setActiveConversationId(newConv.id);
+    localStorage.setItem(`mentor_conversations_${student.id}`, JSON.stringify(updatedConvs));
+    localStorage.setItem(`mentor_active_conv_${student.id}`, newConv.id);
+    setChatSidebarOpen(false);
+  };
+
+  const handleClearCurrentChat = () => {
+    if (!activeConversationId) return;
+    if (window.confirm("Are you sure you want to clear all messages in this conversation?")) {
+      setConversations(prev => prev.map(c => c.id === activeConversationId ? { ...c, messages: [] } : c));
+    }
+  };
+
+  const handleDeleteConversation = (convId) => {
+    if (!convId) return;
+    if (window.confirm("Are you sure you want to delete this conversation?")) {
+      const updated = conversations.filter(c => c.id !== convId);
+      setConversations(updated);
+      if (activeConversationId === convId) {
+        if (updated.length > 0) {
+          setActiveConversationId(updated[0].id);
+        } else {
+          setActiveConversationId("");
+        }
+      }
+    }
+  };
+
+  const handleDeleteAllChats = () => {
+    if (window.confirm("Are you sure you want to delete ALL conversations? This cannot be undone.")) {
+      setConversations([]);
+      setActiveConversationId("");
+      localStorage.removeItem(`mentor_conversations_${student.id}`);
+      localStorage.removeItem(`mentor_active_conv_${student.id}`);
+    }
+  };
+
+  const getGroupedConversations = () => {
+    const today = [];
+    const yesterday = [];
+    const older = [];
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startOfYesterday = startOfToday - 24 * 60 * 60 * 1000;
+
+    conversations.forEach(conv => {
+      const time = new Date(conv.timestamp).getTime();
+      if (time >= startOfToday) {
+        today.push(conv);
+      } else if (time >= startOfYesterday) {
+        yesterday.push(conv);
+      } else {
+        older.push(conv);
+      }
+    });
+
+    return { today, yesterday, older };
+  };
+
+  const renderSidebarItem = (conv) => {
+    const isActive = conv.id === activeConversationId;
+    return (
+      <div 
+        key={conv.id}
+        className={`group relative flex items-center justify-between rounded-lg p-2 cursor-pointer transition ${isActive ? 'bg-white/10 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'}`}
+        onClick={() => {
+          setActiveConversationId(conv.id);
+          setChatSidebarOpen(false);
+        }}
+      >
+        <div className="flex items-center gap-2 min-w-0 pr-6">
+          <MessageSquare size={14} className="flex-shrink-0" />
+          <span className="text-xs truncate font-medium">{conv.title}</span>
+        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDeleteConversation(conv.id);
+          }}
+          className="absolute right-2 opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5 rounded transition"
+        >
+          <Trash size={12} />
+        </button>
+      </div>
+    );
+  };
+
+  const renderEmptyState = () => {
+    const suggestions = [
+      { text: "How do I prepare for DSA interviews?", icon: "💡" },
+      { text: "Suggest an advanced full stack web dev project", icon: "🚀" },
+      { text: "How can I improve my resume ATS score?", icon: "📄" },
+      { text: "What is a deadlock in Operating Systems?", icon: "🖥️" }
+    ];
+    return (
+      <div className="flex-1 overflow-y-auto flex flex-col justify-center items-center p-6 text-center animate-[fadeIn_0.3s_ease-out]">
+        <div className="max-w-[500px] space-y-6">
+          <div>
+            <div className="inline-flex p-3 rounded-full bg-white/5 text-primary mb-3 text-2xl">👋</div>
+            <h3 className="text-lg font-bold text-white mb-1">Welcome to Placement Mentor AI</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Ask anything about DSA, Resumes, Mock Interviews, custom timelines, project designs, or career guidance.
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
+            {suggestions.map((s, idx) => (
+              <button
+                key={idx}
+                onClick={() => setChatInput(s.text)}
+                className="p-3 rounded-xl bg-white/[0.02] border border-white/5 hover:border-primary/30 hover:bg-white/[0.04] transition text-xs text-slate-300 flex items-start gap-2.5"
+              >
+                <span className="text-sm">{s.icon}</span>
+                <span className="font-semibold leading-normal">{s.text}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderThinkingIndicator = () => {
+    return (
+      <div className="message-bubble assistant" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <span>Placement Mentor is thinking</span>
+        <div className="thinking-dots">
+          <span className="thinking-dot"></span>
+          <span className="thinking-dot"></span>
+          <span className="thinking-dot"></span>
+        </div>
+      </div>
+    );
+  };
+
+  const renderMessage = (msg, idx) => {
+    const isAssistant = msg.sender === "assistant";
+    return (
+      <div key={idx} className={`message-bubble ${msg.sender} flex flex-col gap-2`}>
+        <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }} className="text-sm leading-relaxed">
+          <ReactMarkdown 
+            remarkPlugins={[remarkGfm]}
+            components={{
+              code({ node, inline, className, children, ...props }) {
+                const match = /language-(\w+)/.exec(className || '');
+                const language = match ? match[1] : '';
+                const codeString = String(children).replace(/\n$/, '');
+                if (!inline && match) {
+                  return (
+                    <div className="code-block-container my-3 rounded-lg overflow-hidden border border-white/10 bg-slate-950 text-left font-sans">
+                      <div className="flex justify-between items-center px-4 py-1.5 bg-slate-900/80 text-[10px] text-slate-400 font-semibold border-b border-white/5">
+                        <span>{language.toUpperCase()}</span>
+                        <button 
+                          onClick={() => {
+                            navigator.clipboard.writeText(codeString);
+                            alert("Code copied to clipboard!");
+                          }}
+                          className="hover:text-white flex items-center gap-1 transition"
+                        >
+                          <Copy size={10} />
+                          <span>Copy Code</span>
+                        </button>
+                      </div>
+                      <pre className="p-3 overflow-auto max-h-[250px] text-xs text-slate-100 font-mono" style={{ whiteSpace: 'pre', margin: 0 }}>
+                        <code {...props}>{children}</code>
+                      </pre>
+                    </div>
+                  );
+                }
+                return (
+                  <code className="bg-white/10 px-1 py-0.5 rounded text-xs font-mono" {...props}>
+                    {children}
+                  </code>
+                );
+              }
+            }}
+          >
+            {msg.content}
+          </ReactMarkdown>
+        </div>
+
+        {isAssistant && (
+          <div className="flex items-center gap-2 mt-1 pt-1.5 border-t border-white/5 text-slate-400 text-xs">
+            <button 
+              onClick={() => {
+                navigator.clipboard.writeText(msg.content);
+                alert("Response copied to clipboard!");
+              }}
+              className="hover:text-white flex items-center gap-1 transition-colors p-1"
+              title="Copy Response"
+            >
+              <Copy size={12} />
+              <span className="hidden sm:inline">Copy</span>
+            </button>
+
+            {msg.content.includes("```") && (
+              <button 
+                onClick={() => {
+                  const codeBlocks = [];
+                  const regex = /```(?:\w+)?\n([\s\S]*?)```/g;
+                  let match;
+                  while ((match = regex.exec(msg.content)) !== null) {
+                    codeBlocks.push(match[1]);
+                  }
+                  if (codeBlocks.length > 0) {
+                    navigator.clipboard.writeText(codeBlocks.join("\n\n"));
+                    alert("All code blocks copied!");
+                  }
+                }}
+                className="hover:text-white flex items-center gap-1 transition-colors p-1"
+                title="Copy All Code Blocks"
+              >
+                <Code size={12} />
+                <span className="hidden sm:inline">Copy Code</span>
+              </button>
+            )}
+
+            <button 
+              onClick={() => handleRegenerateResponse(activeConversationId, idx)}
+              className="hover:text-white flex items-center gap-1 transition-colors p-1"
+              title="Regenerate Response"
+              disabled={chatLoading}
+            >
+              <RotateCcw size={12} />
+              <span className="hidden sm:inline">Regenerate</span>
+            </button>
+
+            <div className="ml-auto flex items-center gap-1">
+              <button 
+                onClick={() => handleLikeMessage(activeConversationId, idx)}
+                className={`p-1 transition-colors rounded ${msg.feedback === 'like' ? 'text-green-400 bg-green-500/10' : 'hover:text-white'}`}
+              >
+                <ThumbsUp size={12} />
+              </button>
+              <button 
+                onClick={() => handleDislikeMessage(activeConversationId, idx)}
+                className={`p-1 transition-colors rounded ${msg.feedback === 'dislike' ? 'text-red-400 bg-red-500/10' : 'hover:text-white'}`}
+              >
+                <ThumbsDown size={12} />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderInputArea = () => {
+    const handleTextareaKeyDown = (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendChatMessage();
+      }
+    };
+
+    return (
+      <div className="p-3 border-t border-white/5 bg-slate-900/20">
+        <div className="chat-input-container">
+          <textarea
+            ref={textareaRef}
+            rows="1"
+            className="chat-textarea"
+            placeholder="Ask your placement mentor anything..."
+            value={chatInput}
+            onChange={handleInputChange}
+            onKeyDown={handleTextareaKeyDown}
+            disabled={chatLoading}
+          />
+          <button 
+            onClick={() => sendChatMessage()} 
+            className="p-2 bg-primary hover:bg-primary/80 disabled:bg-slate-700 disabled:opacity-50 text-white rounded-xl transition flex items-center justify-center flex-shrink-0"
+            disabled={chatLoading || !chatInput.trim()}
+          >
+            <Send size={16} />
+          </button>
+        </div>
+        <p className="text-[10px] text-slate-500 text-center mt-1.5 hidden sm:block">
+          Placement Mentor can make mistakes. Consider checking important information.
+        </p>
+      </div>
+    );
   };
 
   const fetchProjectRecommendations = async () => {
@@ -741,78 +1244,126 @@ export default function App() {
 
         {/* TAB 2: CHAT PORTAL */}
         {activeTab === "chat" && (
-          <div>
-            <header className="page-header">
-              <h2>Chat with <span className="gradient-text">Placement Mentor</span></h2>
-              <p>Your Coordinator agent routing queries to Resume, Roadmap, DSA and Interview specialist agents.</p>
+          <div className="flex flex-col h-[calc(100dvh-5.75rem)] md:h-auto overflow-hidden">
+            {/* Header bar */}
+            <header className="page-header flex-shrink-0 flex justify-between items-center px-2 md:px-0">
+              <div>
+                <h2>Chat with <span className="gradient-text">Placement Mentor</span></h2>
+                <p className="hidden sm:block text-xs text-slate-400">Coordinator agent routing queries to specialized sub-agents.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setChatSidebarOpen(true)} 
+                  className="md:hidden p-2 text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg flex items-center gap-1.5 text-xs font-semibold"
+                >
+                  <MessageSquare size={16} />
+                  <span>History</span>
+                </button>
+              </div>
             </header>
 
-            <div className="glass-card" style={{ padding: '0', display: 'flex', flexDirection: 'column' }}>
-              <div className="chat-messages">
-                {chatMessages.length === 0 && (
-                  <div style={{ margin: 'auto', textAlign: 'center', padding: '2rem', maxWidth: '400px' }}>
-                    <Sparkles color="#8b5cf6" size={32} style={{ marginBottom: '1rem' }} />
-                    <h4 style={{ marginBottom: '0.5rem' }}>No conversations yet</h4>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Ask general queries or click suggestions to test sub-agents:</p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1.5rem' }}>
-                      {[
-                        "How do I prepare for DSA interviews?",
-                        "Suggest a web development project idea",
-                        "How can I improve my resume ATS score?",
-                        "What is a deadlock in OS?"
-                      ].map((prompt, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => {
-                            setChatInput(prompt);
-                          }}
-                          style={{
-                            background: 'rgba(255, 255, 255, 0.03)',
-                            border: '1px solid var(--surface-border)',
-                            padding: '0.5rem 1rem',
-                            borderRadius: '50px',
-                            cursor: 'pointer',
-                            fontSize: '0.85rem',
-                            color: 'var(--text-secondary)',
-                            textAlign: 'left'
-                          }}
-                        >
-                          {prompt}
-                        </button>
-                      ))}
+            {/* Main Chat Layout Area (Row container) */}
+            <div className="glass-card flex-1 min-h-0 overflow-hidden flex flex-row p-0 relative" style={{ background: 'var(--surface)' }}>
+              
+              {/* SIDEBAR FOR CHAT HISTORY */}
+              <div className={`chat-history-sidebar ${chatSidebarOpen ? 'open' : ''} md:flex flex-col flex-shrink-0`}>
+                {/* New Chat Button */}
+                <div className="p-3 border-b border-white/5 flex-shrink-0">
+                  <button 
+                    onClick={handleNewChat}
+                    className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-semibold text-white transition-all"
+                  >
+                    <Plus size={16} />
+                    <span>New Chat</span>
+                  </button>
+                </div>
+
+                {/* Chat Lists grouped chronologically */}
+                <div className="flex-1 overflow-y-auto p-2 space-y-4">
+                  {/* Today */}
+                  {getGroupedConversations().today.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-2 py-1">Today</div>
+                      {getGroupedConversations().today.map(conv => renderSidebarItem(conv))}
                     </div>
-                  </div>
-                )}
-                {chatMessages.map((msg, idx) => (
-                  <div key={idx} className={`message-bubble ${msg.sender} max-w-[85%] md:max-w-[70%]`}>
-                    <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                  )}
+
+                  {/* Yesterday */}
+                  {getGroupedConversations().yesterday.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-2 py-1">Yesterday</div>
+                      {getGroupedConversations().yesterday.map(conv => renderSidebarItem(conv))}
                     </div>
-                  </div>
-                ))}
-                {chatLoading && (
-                  <div className="message-bubble assistant" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <RefreshCw size={16} className="animate-spin" />
-                    <span>Mentor Agent is reasoning...</span>
-                  </div>
-                )}
-                <div ref={chatEndRef} />
+                  )}
+
+                  {/* Older */}
+                  {getGroupedConversations().older.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-2 py-1">Older</div>
+                      {getGroupedConversations().older.map(conv => renderSidebarItem(conv))}
+                    </div>
+                  )}
+
+                  {conversations.length === 0 && (
+                    <div className="text-xs text-slate-500 text-center py-8">No chats yet</div>
+                  )}
+                </div>
+
+                {/* Sidebar Operations Footer */}
+                <div className="p-2 border-t border-white/5 space-y-1 bg-black/10 flex-shrink-0">
+                  {activeConversationId && (
+                    <>
+                      <button 
+                        onClick={handleClearCurrentChat}
+                        className="w-full text-left text-xs font-semibold text-slate-400 hover:text-white hover:bg-white/5 py-1.5 px-3 rounded flex items-center gap-2 transition"
+                      >
+                        <RefreshCw size={12} />
+                        <span>Clear Current Chat</span>
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteConversation(activeConversationId)}
+                        className="w-full text-left text-xs font-semibold text-red-400 hover:text-red-300 hover:bg-red-500/10 py-1.5 px-3 rounded flex items-center gap-2 transition"
+                      >
+                        <Trash size={12} />
+                        <span>Delete Conversation</span>
+                      </button>
+                    </>
+                  )}
+                  {conversations.length > 0 && (
+                    <button 
+                      onClick={handleDeleteAllChats}
+                      className="w-full text-left text-xs font-semibold text-red-500 hover:text-red-400 hover:bg-red-500/15 py-1.5 px-3 rounded flex items-center gap-2 transition"
+                    >
+                      <Trash2 size={12} />
+                      <span>Delete All Chats</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <form onSubmit={sendChatMessage} style={{ display: 'flex', borderTop: '1px solid var(--surface-border)', padding: '1rem', background: 'rgba(9, 13, 22, 0.4)' }}>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Ask your placement mentor anything..."
-                  value={chatInput}
-                  onChange={e => setChatInput(e.target.value)}
-                  style={{ borderTopRightRadius: '0', borderBottomRightRadius: '0', borderRight: 'none' }}
-                  disabled={chatLoading}
+              {/* Backdrop Overlay for mobile sidebar */}
+              {chatSidebarOpen && (
+                <div 
+                  className="fixed inset-0 bg-black/55 backdrop-blur-sm z-[140] md:hidden"
+                  onClick={() => setChatSidebarOpen(false)}
                 />
-                <button type="submit" className="btn-primary" style={{ borderTopLeftRadius: '0', borderBottomLeftRadius: '0' }} disabled={chatLoading}>
-                  <Send size={16} />
-                </button>
-              </form>
+              )}
+
+              {/* MAIN MESSAGES DISPLAY */}
+              <div className="flex-1 flex flex-col min-w-0 bg-[#090d16]/30">
+                {!activeConversationId || activeMessages.length === 0 ? (
+                  renderEmptyState()
+                ) : (
+                  <div className="chat-messages flex-1 overflow-y-auto">
+                    {activeMessages.map((msg, idx) => renderMessage(msg, idx))}
+                    {chatLoading && renderThinkingIndicator()}
+                    <div ref={chatEndRef} />
+                  </div>
+                )}
+
+                {renderInputArea()}
+              </div>
+
             </div>
           </div>
         )}
