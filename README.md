@@ -1,5 +1,4 @@
 # 🚀 AI Placement Mentor
-### Kaggle + Google "AI Agents: Intensive Vibe Coding Capstone Project"
 
 **AI Placement Mentor** is an intelligent, concierge-style career mentor application designed for B.Tech students, freshers, and job seekers. The system utilizes a **Multi-Agent Architecture** powered by the **Google Agent Development Kit (ADK)**, **Gemini / Groq / OpenRouter Models**, and a dedicated **MCP Server** to deliver highly tailored career coaching. 
 
